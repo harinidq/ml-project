@@ -133,7 +133,97 @@ streamlit run app.py
 ```
 
 ---
+## Source Code
 
+The main application logic is implemented in `app.py`.
+
+```python
+import streamlit as st
+import ollama
+
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+
+# Title
+st.title("AI Resume Analyzer (RAG + Llama 3)")
+
+# Upload Resume
+uploaded_file = st.file_uploader(
+    "Upload your Resume (PDF)",
+    type="pdf"
+)
+
+if uploaded_file:
+
+    # Save uploaded file
+    with open("resume.pdf", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    # Load PDF
+    loader = PyPDFLoader("resume.pdf")
+    docs = loader.load()
+
+    # Split text into chunks
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50
+    )
+
+    chunks = splitter.split_documents(docs)
+
+    # Create embeddings
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
+    # Store in FAISS vector DB
+    db = FAISS.from_documents(chunks, embeddings)
+
+    st.success("Resume processed successfully!")
+
+    # Ask question
+    query = st.text_input("Ask something about your resume")
+
+    if query:
+
+        # Retrieve relevant chunks
+        results = db.similarity_search(query, k=3)
+
+        # Combine retrieved text
+        context = "\n".join([r.page_content for r in results])
+
+        # Prompt
+        prompt = f"""
+You are an AI Resume Analyzer.
+
+Answer ONLY what is asked.
+
+Do not provide unnecessary information.
+
+Resume Content:
+{context}
+
+Question:
+{query}
+"""
+
+        # Generate response using Ollama + Llama 3
+        response = ollama.chat(
+            model="llama3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        # Show answer
+        st.subheader("Answer")
+        st.write(response["message"]["content"])
+```
 # Output
 
 ## Output 1
